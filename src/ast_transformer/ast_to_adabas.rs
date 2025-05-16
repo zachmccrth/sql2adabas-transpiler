@@ -14,12 +14,15 @@ pub fn ast_to_adabas(ast: &Vec<&Query>) -> Result<Expr, ParserError> {
         Some(valid) => {retrieve_tree(valid)}
     }
 }
-
+// Ok what do we want to do here?
+// I'd like to be able to define the tree. That   means I need to know what a WHERE clause turns into
+// Ok. After examination, the parser will literally accept any expression after a where, it would be my responsibility to ensure
+// that only valid ADABAS expressions are accepted (honestly a feature, thank you package authors)
 fn retrieve_tree(expression: &Expr) -> Result<Expr, ParserError> {
     match  expression {
         Expr::BinaryOp { op, left, right } => {
-           return Ok(Expr::BinaryOp {op: op.clone(), left: left.clone(), right: right.clone()}) 
+           Ok(Expr::BinaryOp {op: op.clone(), left: left.clone(), right: right.clone()}) 
         }
-        _ => return Err(ParserError::ParserError("Not a binary query".to_string()))
+        _ => Err(ParserError::ParserError("Not a binary query".to_string()))
     } 
 }
