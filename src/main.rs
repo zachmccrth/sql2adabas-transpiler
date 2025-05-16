@@ -1,3 +1,5 @@
+mod ast_transformer;
+
 use sqlparser::dialect::GenericDialect;
 use sqlparser::parser::Parser;
 fn main() {
