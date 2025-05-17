@@ -1,9 +1,7 @@
 use sqlparser::ast::{BinaryOperator, Expr, Query, SetExpr};
 use sqlparser::parser::{ParserError};
-use crate::ast_transformer::ast_to_adabas::BooleanExpr::Comparison;
-use crate::ast_transformer::ast_to_adabas::LogicalOperator::AND;
 
-pub fn ast_to_adabas(select_statement_ast: &Query) -> Result<Option<>, ParserError> {
+pub fn ast_to_adabas(select_statement_ast: &Query) -> Result<Option<BooleanExpr>, ParserError> {
     let where_clause = match select_statement_ast.body.as_ref() {
         SetExpr::Select(statement) => {
            &statement.selection
@@ -27,28 +25,72 @@ pub fn ast_to_adabas(select_statement_ast: &Query) -> Result<Option<>, ParserErr
 // my responsibility to ensure that only valid ADABAS expressions are accepted 
 // (honestly a feature, thank you package authors)
 
-// Here there is definitely and expression, just might be a parser error
-fn retrieve_tree(expression: &Expr) -> Result<BooleanExpr , ParserError> {
-    // Based on Rust docs, recursive types require a Box
-    match expression {
-        Expr::BinaryOp { op, left, right } => {
+// Here there is definitely an expression, just might be a parser error
+fn retrieve_tree(expression: &Expr) -> Result<BooleanExpr, ParserError> {
+    let Expr::BinaryOp { op, left, right } = expression else {
+        return Err(ParserError::ParserError("Not a binary expression".to_string()));
+    };
+
+    match op {
+        BinaryOperator::And | BinaryOperator::Or => {
+            let left_expr = Box::new(retrieve_tree(left)?);
+            let right_expr = Box::new(retrieve_tree(right)?);
             let logical_op = match op {
-                BinaryOperator::And => LogicOp{op: LogicalOperator::AND, left: Box::new(left), right: Box::new(right.clone())},
-                BinaryOperator::Or => LogicOp{},
-                BinaryOperator::Eq => Comparison()
-                _ => {return Err(ParserError::ParserError("Not a logical operator".to_string()))}
+                BinaryOperator::And => LogicalOperator::AND,
+                BinaryOperator::Or => LogicalOperator::OR,
+                _ => unreachable!(),
             };
 
             Ok(BooleanExpr::LogicOp(Box::new(LogicOp {
                 op: logical_op,
-                left: Box::new(convert_expr_to_bool(*left)?),
-                right: Box::new(convert_expr_to_bool(*right)?),
+                left: left_expr,
+                right: right_expr,
             })))
         }
-    
 
-        _ => Err("Not a valid boolean expression".into()),
+        BinaryOperator::Eq
+        | BinaryOperator::NotEq
+        | BinaryOperator::Lt
+        | BinaryOperator::Gt
+        | BinaryOperator::LtEq
+        | BinaryOperator::GtEq=> {
+            let ident = extract_identifier(&**left)?;
+            let value = extract_value(right)?;
+            let comparator = match op {
+                BinaryOperator::Eq=> Comparator::Equal,
+                BinaryOperator::NotEq=> Comparator::NotEqual,
+                BinaryOperator::Lt=> Comparator::LessThan,
+                BinaryOperator::Gt=> Comparator::GreaterThan,
+                BinaryOperator::LtEq=> Comparator::LessThanOrEqual,
+                BinaryOperator::GtEq=> Comparator::GreaterThanOrEqual,
+                _ => unreachable!(),
+            };
+
+            Ok(BooleanExpr::Comparison(Comparison {
+                op: comparator,
+                left: ident,
+                right: value,
+            }))
+        }
+        _ => Err(ParserError::ParserError(format!("Unhandled operator: {:?}", op))),
     }
+}
+
+fn extract_value(value: &Expr) -> Result<Value, ParserError> {
+    let Expr::Value(value) = value else {
+        return Err(ParserError::ParserError("Not a literal value".to_string()))
+    };
+    match  value {
+        
+    }
+}
+
+fn extract_identifier(expr: &Expr) -> Result<Identifier, ParserError> {
+    let Expr::Identifier(ident)  = expr else {
+       return Err(ParserError::ParserError("Not a identifier".to_string())); 
+        
+    };
+    Ok(Identifier{value: ident.value.clone()})
 }
 
 pub enum BooleanExpr {
@@ -57,9 +99,9 @@ pub enum BooleanExpr {
 }
 
 pub struct LogicOp {
+    pub op: LogicalOperator,
     pub left: Box<BooleanExpr>,
     pub right: Box<BooleanExpr>,
-    pub op: LogicalOperator,
 }
 
 pub enum LogicalOperator {
@@ -68,12 +110,14 @@ pub enum LogicalOperator {
 }
 
 pub struct Comparison {
+    pub op: Comparator,
     pub left: Identifier,
     pub right: Value,
-    pub op: Comparator,
 }
 
-pub struct Identifier(pub String);
+pub struct Identifier {
+    pub value: String,
+}
 
 pub enum Comparator {
     Equal,
