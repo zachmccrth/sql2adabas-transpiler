@@ -1,7 +1,6 @@
+use crate::ast_transformer::ast_to_adabas::*;
 use std::fmt;
 use std::fmt::Display;
-use crate::ast_transformer::ast_to_adabas::*;
-
 
 // ───────────────────────────────
 // 🌲 Trait for Tree Display
@@ -23,10 +22,7 @@ impl TreeDisplay for BooleanExpr {
                 writeln!(
                     f,
                     "{}Comparison: {:?} {} {:?}",
-                    pad,
-                    comp.op,
-                    comp.left.value,
-                    comp.right
+                    pad, comp.op, comp.left.value, comp.right
                 )
             }
         }
