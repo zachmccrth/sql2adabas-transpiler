@@ -1,3 +1,5 @@
+use std::fmt::Display;
+use sqlparser::ast;
 use sqlparser::ast::{BinaryOperator, Expr, Query, SetExpr};
 use sqlparser::parser::{ParserError};
 
@@ -78,10 +80,19 @@ fn retrieve_tree(expression: &Expr) -> Result<BooleanExpr, ParserError> {
 
 fn extract_value(value: &Expr) -> Result<Value, ParserError> {
     let Expr::Value(value) = value else {
-        return Err(ParserError::ParserError("Not a literal value".to_string()))
+        return Err(ParserError::ParserError(format!("Not a literal value: {}", value)));
     };
-    match  value {
-        
+    match &value.value {
+        ast::Value::Boolean(b) => Ok(Value::Bool(*b)),
+        ast::Value::Number(n,_) => Ok(Value::Number(n.to_string())),
+        ast::Value::SingleQuotedString(s) |
+        ast::Value::DoubleQuotedString(s) |
+        ast::Value::TripleDoubleQuotedString(s) => {
+            Ok(Value::String(s.clone()))
+        },
+        _ => {
+            Err(ParserError::ParserError("Not a valid value".to_string()))
+        }
     }
 }
 
@@ -92,33 +103,51 @@ fn extract_identifier(expr: &Expr) -> Result<Identifier, ParserError> {
     };
     Ok(Identifier{value: ident.value.clone()})
 }
-
+#[derive(Debug)]
 pub enum BooleanExpr {
     LogicOp(Box<LogicOp>),
     Comparison(Comparison),
 }
+impl Display for BooleanExpr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BooleanExpr::LogicOp(op) => write!(f, "{:?}", op ),
+            BooleanExpr::Comparison(comparison) => write!(f, "{:?}", &comparison ), 
+        }
+    }
+}
 
+impl Display for LogicOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self) 
+    }
+}
+#[derive(Debug)]
 pub struct LogicOp {
     pub op: LogicalOperator,
     pub left: Box<BooleanExpr>,
     pub right: Box<BooleanExpr>,
 }
 
+#[derive(Debug)]
 pub enum LogicalOperator {
     AND,
     OR,
 }
 
+#[derive(Debug)]
 pub struct Comparison {
     pub op: Comparator,
     pub left: Identifier,
     pub right: Value,
 }
 
+#[derive(Debug)]
 pub struct Identifier {
     pub value: String,
 }
 
+#[derive(Debug)]
 pub enum Comparator {
     Equal,
     NotEqual,
@@ -128,9 +157,9 @@ pub enum Comparator {
     GreaterThanOrEqual,
 }
 
+#[derive(Debug)]
 pub enum Value {
-    Int(i64),
-    Float(f64),
+    Number(String),
     Bool(bool),
     String(String),
 }
